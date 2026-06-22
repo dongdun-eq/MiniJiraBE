@@ -6,16 +6,21 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTaskDto } from './dto/query-task.dto';
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../common/common.constant';
 import { Prisma } from '../../generated/prisma/client';
-import { ListTasksResponseDto } from './dto/list-tasks-reponse.dto';
-import { DetailTaskResponseDto } from './dto/task-response.dto';
-import { SingleTaskResponseDto } from './dto/single-task-response.dto';
+import {
+  DetailTaskResponseDto,
+  TaskResponseDto,
+} from './dto/task-response.dto';
 import { formatStatus } from './task.helper';
+import { ListResponseDto } from '../common/dto/list-response.dto';
+import { SingleResponseDto } from '../common/dto/single-response.dto';
 
 @Injectable()
 export class TasksService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(queryDto: QueryTaskDto): Promise<ListTasksResponseDto> {
+  async findAll(
+    queryDto: QueryTaskDto,
+  ): Promise<ListResponseDto<DetailTaskResponseDto>> {
     const {
       page = DEFAULT_PAGE,
       limit = DEFAULT_PAGE_SIZE,
@@ -36,7 +41,7 @@ export class TasksService {
       this.prisma.task.count({ where }),
       this.prisma.task.findMany({
         where,
-        orderBy: { position: 'asc' },
+        orderBy: { position: 'desc' },
         skip,
         take: limit,
         select: {
@@ -91,7 +96,7 @@ export class TasksService {
     };
   }
 
-  async findOne(id: string): Promise<SingleTaskResponseDto> {
+  async findOne(id: string): Promise<SingleResponseDto<TaskResponseDto>> {
     const task = await this.prisma.task.findUnique({
       where: { id },
       select: {
@@ -123,7 +128,9 @@ export class TasksService {
     };
   }
 
-  async create(dto: CreateTaskDto): Promise<SingleTaskResponseDto> {
+  async create(
+    dto: CreateTaskDto,
+  ): Promise<SingleResponseDto<TaskResponseDto>> {
     const task = await this.prisma.task.create({
       data: {
         title: dto.title,
@@ -159,7 +166,10 @@ export class TasksService {
     };
   }
 
-  async update(id: string, dto: UpdateTaskDto): Promise<SingleTaskResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateTaskDto,
+  ): Promise<SingleResponseDto<TaskResponseDto>> {
     try {
       const task = await this.prisma.task.update({
         where: { id },
@@ -208,7 +218,8 @@ export class TasksService {
   async updateStatus(
     id: string,
     dto: UpdateStatusTaskDto,
-  ): Promise<SingleTaskResponseDto> {
+  ): Promise<SingleResponseDto<TaskResponseDto>> {
+    console.log(dto);
     try {
       const task = await this.prisma.task.update({
         where: { id },

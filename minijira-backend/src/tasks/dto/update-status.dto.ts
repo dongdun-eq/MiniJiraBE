@@ -13,6 +13,14 @@ import { NormalizeEnumString } from '../../common/common.decorator';
 
 export class UpdateStatusTaskDto {
   @ApiProperty({
+    example: SWAGGER_TASK_POSITION_EXAMPLE,
+    description: SWAGGER_TASK_POSITION_DESC,
+  })
+  @IsString({ message: TASK_POSITION_NOT_STRING_MESSAGE })
+  @IsNotEmpty()
+  position!: string;
+
+  @ApiProperty({
     example: SWAGGER_TASK_STATUS_EXAMPLE,
     description: SWAGGER_TASK_STATUS_DESC,
     enum: Status,
@@ -21,12 +29,4 @@ export class UpdateStatusTaskDto {
   @IsEnum(Status, { message: TASK_STATUS_INVALID_MESSAGE })
   @IsNotEmpty()
   status!: Status;
-
-  @ApiProperty({
-    example: SWAGGER_TASK_POSITION_EXAMPLE,
-    description: SWAGGER_TASK_POSITION_DESC,
-  })
-  @IsString({ message: TASK_POSITION_NOT_STRING_MESSAGE })
-  @IsNotEmpty()
-  position!: string;
 }

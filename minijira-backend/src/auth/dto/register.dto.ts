@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import {
   EMAIL_INVALID_MESSAGE,
   IMAGE_URL_NOT_STRING,
@@ -51,6 +57,7 @@ export class RegisterDto {
     description: SWAGGER_AVATAR_DESC,
     required: false,
   })
-  @IsString({ message: IMAGE_URL_NOT_STRING })
+  @IsOptional()
+  @IsString({ message: IMAGE_URL_NOT_STRING, always: false })
   avatarUrl?: string;
 }

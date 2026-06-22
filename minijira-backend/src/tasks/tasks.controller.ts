@@ -102,7 +102,8 @@ export class TasksController {
     description: SWAGGER_RESP_NOT_FOUND,
   })
   updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusTaskDto) {
-    return this.tasksService.update(id, dto);
+    console.log(dto);
+    return this.tasksService.updateStatus(id, dto);
   }
 
   @Delete(':id')
