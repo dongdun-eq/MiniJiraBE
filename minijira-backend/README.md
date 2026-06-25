@@ -1,98 +1,231 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# MiniJira
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A Kanban-style task board, built as a learning project to practice production-grade frontend/backend patterns: drag-and-drop, optimistic updates, URL-driven filters, and clean state architecture.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+![Status](https://img.shields.io/badge/status-in%20development-yellow)
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Tech Stack
 
-## Project setup
+| Layer        | Technology                 |
+| ------------ | -------------------------- |
+| Frontend     | React 19, TypeScript, Vite |
+| Server state | `@tanstack/react-query`    |
+| Drag & drop  | `@hello-pangea/dnd`        |
+| Forms        | `react-hook-form`          |
+| Backend      | NestJS, Prisma ORM         |
+| Database     | MariaDB                    |
+| Auth state   | Redux Toolkit              |
 
-```bash
-$ pnpm install
+---
+
+## Architecture Overview
+
+The app is split into three independent state domains, each owned by a different mechanism — this is the single most important architectural decision in the codebase, and it eliminates an entire class of bugs (race conditions between competing sources of truth) that earlier iterations of this project ran into.
+
+```mermaid
+graph TB
+    subgraph "State Ownership"
+        URL["URL Search Params<br/>(filters: status, priority,<br/>assignee, due date range)"]
+        RQ["React Query Cache<br/>(task list, single source<br/>of truth for server data)"]
+        CTX["React Context<br/>(modal open/close,<br/>toast queue — UI-only state)"]
+        REDUX["Redux Toolkit<br/>(auth session)"]
+    end
+
+    URL -->|read via useTaskFilters| BOARD[Board.tsx]
+    RQ -->|read via useTasks| BOARD
+    BOARD -->|derives, useMemo| COLS["columns: ColumnType[]"]
+    COLS --> COL[Column.tsx]
+    COL --> CARD[TaskCard.tsx]
+
+    CARD -->|drag end| DND["@hello-pangea/dnd<br/>onDragEnd"]
+    DND -->|mutate| MUT[useTaskMutations]
+    MUT -->|optimistic write| RQ
+    MUT -->|HTTP request| API[NestJS API]
+    API --> DB[(MariaDB)]
+
+    CTX -->|openCreate/openEdit| MODAL[TaskModal.tsx]
+    MODAL -->|submit| MUT
+
+    REDUX -->|isLoggedIn, user| APP[App.tsx]
 ```
 
-## Compile and run the project
+**Why three separate mechanisms instead of one global store:**
 
-```bash
-# development
-$ pnpm run start
+- **URL** owns filter state because it must be shareable (copy link → paste in new tab → same filtered view) and must survive a page refresh. Redux/Context state both vanish on refresh; the URL doesn't.
+- **React Query cache** owns all task data. There is no local `useState` copy of the task list anywhere — `columns` (the Kanban grouping) is _derived_ from the cache via `useMemo`, never stored separately. Earlier versions of this board kept a parallel `useState` for `columns` that was manually synced from the cache; this created a race condition where drag-and-drop's optimistic update and the cache's "real" data could disagree about which column a task was in, depending on network timing.
+- **Context** owns only ephemeral UI state that has no business being persisted or shared via URL — modal visibility and toast queue. Context values are wrapped in `useMemo` to prevent unrelated consumers from re-rendering on every parent render.
 
-# watch mode
-$ pnpm run start:dev
+---
 
-# production mode
-$ pnpm run start:prod
+## Data Flow: Drag and Drop
+
+This is the most complex interaction in the app, so it's worth diagramming on its own.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant DnD as "@hello-pangea/dnd"
+    participant Board
+    participant Cache as "React Query Cache"
+    participant API as "NestJS API"
+    participant DB as MariaDB
+
+    User->>DnD: drags TaskCard to new column
+    DnD->>Board: onDragEnd(source, destination)
+    Board->>Board: calculateNextPosition() — Lexorank
+    Board->>Cache: setQueryData (optimistic update)
+    Note over Cache: UI updates immediately,<br/>before network round-trip
+    Board->>API: PATCH /tasks/:id/status
+    alt Success
+        API->>DB: UPDATE Task SET status, position
+        API-->>Board: 200 OK
+        Board->>Cache: invalidateQueries(["tasks"])
+        Note over Cache: Refetch confirms<br/>optimistic state was correct
+    else Failure
+        API-->>Board: 4xx/5xx
+        Board->>Cache: rollback to previousTasks snapshot
+        Board->>User: show error toast
+    end
 ```
 
-## Run tests
+**Key implementation detail:** the optimistic update and the rollback snapshot are both owned by the _mutation's_ `onMutate`/`onError` lifecycle (inside `useTaskMutations`), not by the component calling it. `Board.tsx` does not call `queryClient.setQueryData` directly anymore — an earlier version did, and it caused the rollback snapshot to capture an already-mutated state, making error recovery silently no-op. Centralizing this in one place (`buildOptimisticMutationOptions`) means every mutation — update, status change, delete — gets correct optimistic behavior for free.
 
-```bash
-# unit tests
-$ pnpm run test
+---
 
-# e2e tests
-$ pnpm run test:e2e
+## Backend Architecture
 
-# test coverage
-$ pnpm run test:cov
+```mermaid
+graph LR
+    REQ[HTTP Request] --> CTRL[TasksController]
+    CTRL -->|validates via DTO| PIPE["ValidationPipe<br/>(whitelist, transform)"]
+    PIPE --> CTRL
+    CTRL -->|delegates| SVC[TasksService]
+    SVC -->|Prisma Client| DB[(MariaDB)]
+    SVC --> CTRL
+    CTRL --> RES[HTTP Response]
+
+    subgraph "DTO layer"
+        CREATE[CreateTaskDto]
+        UPDATE[UpdateTaskDto]
+        STATUS[UpdateStatusTaskDto]
+        QUERY[QueryTaskDto]
+    end
+
+    PIPE -.validates against.- CREATE
+    PIPE -.validates against.- UPDATE
+    PIPE -.validates against.- STATUS
+    PIPE -.validates against.- QUERY
 ```
 
-## Deployment
+Each task action — create, update fields, change status/position, delete — has its **own dedicated DTO and Controller route**, rather than one generic `PATCH /tasks/:id` that accepts a loose partial object. This was a deliberate choice: status changes (drag-and-drop) happen far more frequently than field edits, have different validation needs (`position` is required and non-empty, unlike a general update), and benefit from being auditable separately in logs.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### A real bug this caught, worth documenting
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Early in development, `PATCH /tasks/:id/status` was wired to call `TasksService.update()` instead of the dedicated `TasksService.updateStatus()` — a copy-paste/autocomplete mistake, since both method names are similar. The symptom was silent: the request succeeded, returned `200`, but `position` was never persisted, because `update()`'s Prisma call only included `title`/`status`/`priority`/`assigneeId`/`dueDate` — not `position`. No error was thrown anywhere; the only way to catch it was reading the raw SQL log (`prisma:query`) and noticing the generated `UPDATE` statement was missing a column.
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+**Lesson applied going forward:** when a Controller route and a Service method are meant to be a 1:1 pair, name them identically (`updateStatus` ↔ `updateStatus`, not `updateStatus` ↔ `update`) to make a mismatch impossible to miss on review, and prefer that a Controller test or integration test asserts the right Service method was actually invoked.
+
+### Enum values must match exactly between frontend and backend — they don't share a type today
+
+`Status` is defined independently in two places: as a Prisma enum (backend, e.g. `in_progress`) and as a TypeScript union (frontend, e.g. `in-progress`). This mismatch caused tasks to silently disappear from the board — `mapTasksToColumns()` looks up `columnsMap[task.status]`, and a status string that doesn't exactly match a known key returns `undefined`, silently dropping the task instead of erroring.
+
+The current mitigation is a `@Transform` decorator (`NormalizeEnumString`) on the DTO that normalizes incoming values before `@IsEnum` validates them — it accepts either delimiter and coerces to the canonical Prisma value. This is a patch, not a fix: the real fix is generating one shared `Status` type from a single source (e.g. exporting the Prisma enum and consuming it on both sides in a monorepo, or generating frontend types from the OpenAPI/Swagger schema) so the two can't drift again.
+
+---
+
+```
+src/
+├── auth/                      # Module xử lý Auth (JWT, Đăng ký, Đăng nhập)
+│   ├── dto/
+│   │   ├── login.dto.ts
+│   │   └── register.dto.ts
+│   ├── auth.constant.ts
+│   ├── auth.controller.ts
+│   ├── auth.module.ts
+│   ├── auth.service.ts
+│   ├── jwt-guard.guard.ts     # Guard bảo vệ các route cần đăng nhập
+│   └── jwt.strategy.ts        # Chiến lược xác thực Passport JWT
+├── filters/                   # Bộ lọc lỗi toàn cục (Global Exception Filters)
+│   └── all-exceptions.filter.ts
+├── share/                     # Tiện ích, Decorator và hằng số dùng chung toàn app
+│   ├── dto/
+│   ├── share.constant.ts
+│   └── share.decorator.ts
+├── tasks/                     # Module quản lý Công việc (Tasks CRUD)
+│   ├── dto/
+│   │   ├── create-task.dto.ts
+│   │   ├── query-task.dto.ts
+│   │   ├── task-response.dto.ts
+│   │   ├── update-status.dto.ts
+│   │   └── update-task.dto.ts
+│   ├── task.helper.ts         # Hàm bổ trợ (Format dữ liệu, tính toán vị trí Lexorank)
+│   ├── tasks.constant.ts
+│   ├── tasks.controller.ts
+│   ├── tasks.module.ts
+│   └── tasks.service.ts       # Tầng nghiệp vụ xử lý dữ liệu với Prisma
+├── users/                     # Module quản lý Người dùng (Users Profile)
+│   ├── dto/
+│   │   └── user-response.dto.ts
+│   ├── users.constant.ts
+│   ├── users.controller.ts
+│   ├── users.module.ts
+│   └── users.service.ts
+├── app.controller.ts          # Controller gốc của ứng dụng
+└── app.module.ts              # Module chính (Root) tổng hợp tất cả các module con
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## Key Design Decisions & Trade-offs
 
-Check out a few resources that may come in handy when working with NestJS:
+### Filters live in the URL, not in global state
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Required by the spec ("copy URL with filters, paste new tab — same view"). `useTaskFilters()` wraps `useSearchParams`, exposing a clean `{ params, setParams }` API so components never touch the URL directly.
 
-## Support
+### Search is debounced before it touches the URL
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Debouncing happens at the point of writing to the URL, not at the point of firing the API request — typing into the search box updates local component state immediately for responsive UI, then writes to `searchParams` (and triggers a refetch) only after the user pauses.
 
-## Stay in touch
+### Column scrolling: page-level, not per-column
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+`@hello-pangea/dnd` does not support a `Droppable` nested inside two independent scroll containers (a known limitation — [tracked here](https://github.com/atlassian/react-beautiful-dnd/issues/131)). Rather than fight the library with a hand-rolled horizontal-scroll implementation, columns grow to their natural height and the whole board scrolls vertically together. The trade-off: a column with many tasks is no longer independently scrollable with a sticky header — acceptable for a 4-column fixed board, and far lower-risk than maintaining custom scroll math.
 
-## License
+### `React.memo` is applied selectively, not everywhere
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Memoization was added only where React DevTools Profiler showed a component re-rendering for a reason unrelated to its own props or state (e.g. `BoardToolBar` re-rendering purely because its parent, `Board`, re-rendered on every drag). Components that legitimately re-render because their displayed data changed (e.g. `TaskCard` for the task that just moved) are left unmemoized — wrapping every component in `memo` regardless of measured impact was deliberately avoided.
+
+### Toasts are not shown for every successful drag
+
+`updateTaskStatus` intentionally skips a success toast — dragging tasks is a frequent, low-stakes action, and a toast firing on every drop would be noise rather than signal. Errors still surface a toast, since that's the one case the user needs to act on.
+
+---
+
+## Getting Started
+
+```bash
+# Frontend
+cd frontend
+npm install
+npm run dev
+
+# Backend
+cd backend
+npm install
+npx prisma migrate dev
+npm run start:dev
+```
+
+Environment variables required (see `.env.example` in each package):
+
+- `DATABASE_URL` (backend)
+- `VITE_API_BASE_URL` (frontend)
+
+---
+
+## Known Limitations
+
+- Create operations are not optimistic (no temp-ID reconciliation) — acceptable since task creation isn't a high-frequency interaction.
+- No automated test suite yet.
+- Drag-and-drop touch support on mobile has not been extensively tested across devices.
