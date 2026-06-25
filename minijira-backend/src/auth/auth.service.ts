@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { SingleResponseDto } from '../share/dto/single-response.dto';
@@ -8,6 +12,7 @@ import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { DetailUserResponseDto } from '../users/dto/user-response.dto';
 import { AuthenticationResponseDto } from './dto/auth-response.dto';
+import { Prisma } from '../../generated/prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -19,32 +24,42 @@ export class AuthService {
   async register(
     dto: RegisterDto,
   ): Promise<SingleResponseDto<DetailUserResponseDto>> {
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        name: dto.name,
-        password_hash: hashedPassword,
-        ...(dto.avatarUrl && { avatar_url: dto.avatarUrl }),
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatar_url: true,
-        created_at: true,
-      },
-    });
+    try {
+      const hashedPassword = await bcrypt.hash(dto.password, 10);
+      const user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          name: dto.name,
+          password_hash: hashedPassword,
+          ...(dto.avatarUrl && { avatar_url: dto.avatarUrl }),
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          avatar_url: true,
+          created_at: true,
+        },
+      });
 
-    return {
-      data: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        createdAt: user.created_at,
-        ...(user.avatar_url && { avatarUrl: user.avatar_url }),
-      },
-    };
+      return {
+        data: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          createdAt: user.created_at,
+          ...(user.avatar_url && { avatarUrl: user.avatar_url }),
+        },
+      };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(`Email ${dto.email} is already in use`);
+      }
+      throw error;
+    }
   }
 
   async login(
