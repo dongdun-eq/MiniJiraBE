@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { ListResponseDto } from '../common/dto/list-response.dto';
+import { ListResponseDto } from '../share/dto/list-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 
 @Injectable()

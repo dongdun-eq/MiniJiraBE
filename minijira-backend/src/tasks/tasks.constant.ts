@@ -15,10 +15,10 @@ export const TASK_POSITION_NOT_STRING_MESSAGE = 'position must be string';
 
 export const QUERY_TASK_STATUS_INVALID_MESSAGE =
   'Status must be a valid enum value';
-export const QUERY_TASK_PRIORITY_INVALID_MESSAGE =
-  'Priority must be a valid enum value';
+export const QUERY_TASK_PRIORITY_INVALID_MESSAGE = 'Priority must be string';
 export const QUERY_TASK_ASSIGNEE_ID_NOT_STRING_MESSAGE =
   'AssigneeId must be a string';
+export const QUERY_TASK_SEARCH_NOT_STRING_MESSAGE = 'Search must be a string';
 export const QUERY_TASK_PAGE_NOT_INT_MESSAGE = 'Page must be an integer number';
 export const QUERY_TASK_PAGE_MIN_MESSAGE = 'Page cannot be less than 1';
 export const QUERY_TASK_LIMIT_NOT_INT_MESSAGE =
@@ -51,6 +51,9 @@ export const SWAGGER_QUERY_TASK_PRIORITY_DESC = 'Filter by priority';
 
 export const SWAGGER_QUERY_TASK_ASSIGNEE_EXAMPLE = 'user-123';
 export const SWAGGER_QUERY_TASK_ASSIGNEE_DESC = 'Filter by assignee id';
+
+export const SWAGGER_QUERY_TASK_SEARCH_EXAMPLE = 'keyword';
+export const SWAGGER_QUERY_TASK_SEARCH_DESC = 'Filter by keyword';
 
 export const SWAGGER_QUERY_TASK_PAGE_EXAMPLE = 1;
 export const SWAGGER_QUERY_TASK_PAGE_DESC = 'Page number, starting from 1';

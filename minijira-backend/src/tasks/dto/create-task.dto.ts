@@ -25,6 +25,7 @@ import {
   TASK_TITLE_NOT_STRING_MESSAGE,
 } from '../tasks.constant';
 import { Priority, Status } from '../../../generated/prisma/enums';
+import { NormalizeEnumString } from '../../share/share.decorator';
 
 export class CreateTaskDto {
   @ApiProperty({
@@ -49,6 +50,7 @@ export class CreateTaskDto {
     enum: Status,
     required: false,
   })
+  @NormalizeEnumString()
   @IsEnum(Status, { message: TASK_STATUS_INVALID_MESSAGE })
   @IsOptional()
   status?: Status;

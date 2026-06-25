@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RegisterDto } from './dto/register.dto';
-import { SingleResponseDto } from '../common/dto/single-response.dto';
+import { SingleResponseDto } from '../share/dto/single-response.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtPayload } from './dto/jwt-payload.type';
 import { LoginDto } from './dto/login.dto';
@@ -89,22 +89,25 @@ export class AuthService {
     };
   }
 
-  async getProfile(userId: string) {
+  async getProfile(
+    userId: string,
+  ): Promise<SingleResponseDto<DetailUserResponseDto>> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-      },
     });
-
-    console.log('Fetched user profile:', user); // Debugging line
 
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    return { user };
+    return {
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.created_at,
+        avatarUrl: user.avatar_url ?? undefined,
+      },
+    };
   }
 }

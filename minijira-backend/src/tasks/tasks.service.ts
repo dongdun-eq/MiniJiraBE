@@ -4,15 +4,15 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateStatusTaskDto } from './dto/update-status.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTaskDto } from './dto/query-task.dto';
-import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../common/common.constant';
-import { Prisma } from '../../generated/prisma/client';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../share/share.constant';
+import { Priority, Prisma } from '../../generated/prisma/client';
 import {
   DetailTaskResponseDto,
   TaskResponseDto,
 } from './dto/task-response.dto';
-import { formatStatus } from './task.helper';
-import { ListResponseDto } from '../common/dto/list-response.dto';
-import { SingleResponseDto } from '../common/dto/single-response.dto';
+import { mapToDetailTaskResponse, mapToTaskResponse } from './task.helper';
+import { ListResponseDto } from '../share/dto/list-response.dto';
+import { SingleResponseDto } from '../share/dto/single-response.dto';
 
 @Injectable()
 export class TasksService {
@@ -27,12 +27,25 @@ export class TasksService {
       assigneeId,
       priority,
       status,
+      search,
+      minDueDate,
+      maxDueDate,
     } = queryDto;
+
+    const formatedSearch = search?.trim().toLowerCase();
+    const priorities = (priority?.split(',') as Priority[]) ?? undefined;
 
     const where: Prisma.TaskWhereInput = {
       ...(assigneeId && { assignee_id: assigneeId }),
-      ...(priority && { priority: priority }),
+      ...(priorities && { priority: { in: priorities } }),
       ...(status && { status: status }),
+      ...(search && { title: { contains: formatedSearch } }),
+      ...((minDueDate !== undefined || maxDueDate !== undefined) && {
+        due_date: {
+          ...(minDueDate !== undefined && { gte: new Date(minDueDate) }),
+          ...(maxDueDate !== undefined && { lte: new Date(maxDueDate) }),
+        },
+      }),
     };
 
     const skip = (page - 1) * limit;
@@ -44,47 +57,24 @@ export class TasksService {
         orderBy: { position: 'desc' },
         skip,
         take: limit,
-        select: {
-          id: true,
-          title: true,
-          priority: true,
-          assignee: true,
-          status: true,
-          created_at: true,
-          creator: true,
-          due_date: true,
-          description: true,
-          position: true,
-          updated_at: true,
+        include: {
+          assignee: {
+            select: { id: true, name: true },
+          },
+          creator: {
+            select: { id: true, name: true },
+          },
         },
       }),
     ]);
 
     const mappedTasks: DetailTaskResponseDto[] = rawTasks.map((task) => {
       return {
-        id: task.id,
-        title: task.title,
-        priority: task.priority,
-        createdAt: task.created_at,
-        status: formatStatus(task.status),
-        assignee: task.assignee
-          ? {
-              id: task.assignee?.id,
-              name: task.assignee?.name,
-            }
-          : null,
-        creator: {
-          id: task.creator.id,
-          name: task.creator.name,
-        },
-        description: task.description,
-        dueDate: task.due_date,
-        position: task.position,
-        updatedAt: task.updated_at,
+        ...mapToDetailTaskResponse(task),
       };
     });
 
-    const totalPages = Math.ceil(mappedTasks.length / limit);
+    const totalPages = Math.ceil(total / limit);
     return {
       data: mappedTasks,
       pagination: {
@@ -99,13 +89,10 @@ export class TasksService {
   async findOne(id: string): Promise<SingleResponseDto<TaskResponseDto>> {
     const task = await this.prisma.task.findUnique({
       where: { id },
-      select: {
-        id: true,
-        title: true,
-        priority: true,
-        assignee: true,
-        status: true,
-        created_at: true,
+      include: {
+        assignee: {
+          select: { id: true, name: true },
+        },
       },
     });
 
@@ -113,23 +100,14 @@ export class TasksService {
 
     return {
       data: {
-        id: task.id,
-        title: task.title,
-        priority: task.priority,
-        createdAt: task.created_at,
-        status: formatStatus(task.status),
-        assignee: task.assignee
-          ? {
-              id: task.assignee?.id,
-              name: task.assignee?.name,
-            }
-          : null,
+        ...mapToTaskResponse(task),
       },
     };
   }
 
   async create(
     dto: CreateTaskDto,
+    createdBy: string,
   ): Promise<SingleResponseDto<TaskResponseDto>> {
     const task = await this.prisma.task.create({
       data: {
@@ -138,7 +116,7 @@ export class TasksService {
         status: dto.status,
         assignee_id: dto.assigneeId ?? null,
         due_date: dto.dueDate ? new Date(dto.dueDate) : null,
-        created_by: '1', //todo: add user id here
+        created_by: createdBy,
       },
       include: {
         assignee: {
@@ -151,17 +129,7 @@ export class TasksService {
     });
     return {
       data: {
-        id: task.id,
-        title: task.title,
-        priority: task.priority,
-        createdAt: task.created_at,
-        status: formatStatus(task.status),
-        assignee: task.assignee
-          ? {
-              id: task.assignee.id,
-              name: task.assignee.name,
-            }
-          : null,
+        ...mapToTaskResponse(task),
       },
     };
   }
@@ -177,8 +145,10 @@ export class TasksService {
           ...(dto.title && { title: dto.title }),
           ...(dto.status && { status: dto.status }),
           ...(dto.priority && { priority: dto.priority }),
-          ...(dto.assigneeId && { assignee_id: dto.assigneeId }),
-          ...(dto.dueDate && { due_date: dto.dueDate }),
+          ...(dto.assigneeId !== undefined && { assignee_id: dto.assigneeId }),
+          ...(dto.dueDate !== undefined && {
+            due_date: dto.dueDate ? new Date(dto.dueDate) : null,
+          }),
         },
         include: {
           assignee: {
@@ -191,17 +161,7 @@ export class TasksService {
       });
       return {
         data: {
-          id: task.id,
-          title: task.title,
-          priority: task.priority,
-          createdAt: task.created_at,
-          status: formatStatus(task.status),
-          assignee: task.assignee
-            ? {
-                id: task.assignee.id,
-                name: task.assignee.name,
-              }
-            : null,
+          ...mapToTaskResponse(task),
         },
       };
     } catch (error) {
@@ -238,17 +198,7 @@ export class TasksService {
       });
       return {
         data: {
-          id: task.id,
-          title: task.title,
-          priority: task.priority,
-          createdAt: task.created_at,
-          status: formatStatus(task.status),
-          assignee: task.assignee
-            ? {
-                id: task.assignee.id,
-                name: task.assignee.name,
-              }
-            : null,
+          ...mapToTaskResponse(task),
         },
       };
     } catch (error) {
@@ -272,7 +222,7 @@ export class TasksService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2025'
       ) {
-        throw new NotFoundException(`Product with id ${id} not found`);
+        throw new NotFoundException(`Task with id ${id} not found`);
       }
       throw error;
     }

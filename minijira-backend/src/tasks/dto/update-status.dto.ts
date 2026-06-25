@@ -9,7 +9,7 @@ import {
   TASK_STATUS_INVALID_MESSAGE,
 } from '../tasks.constant';
 import { Status } from '../../../generated/prisma/enums';
-import { NormalizeEnumString } from '../../common/common.decorator';
+import { NormalizeEnumString } from '../../share/share.decorator';
 
 export class UpdateStatusTaskDto {
   @ApiProperty({

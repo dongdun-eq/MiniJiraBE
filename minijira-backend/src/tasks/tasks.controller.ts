@@ -10,6 +10,8 @@ import {
   Post,
   Put,
   Query,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -33,6 +35,8 @@ import {
   SWAGGER_TASKS_TAG,
 } from './tasks.constant';
 import { QueryTaskDto } from './dto/query-task.dto';
+import { JwtAuthGuard } from '../auth/jwt-guard.guard';
+import type { AuthenticatedRequest } from '../auth/dto/auth-request.dto';
 
 @ApiTags(SWAGGER_TASKS_TAG)
 @Controller('api/tasks')
@@ -73,8 +77,9 @@ export class TasksController {
     status: HttpStatus.BAD_REQUEST,
     description: SWAGGER_RESP_VALIDATION_ERROR,
   })
-  create(@Body() dto: CreateTaskDto) {
-    return this.tasksService.create(dto);
+  @UseGuards(JwtAuthGuard)
+  create(@Request() req: AuthenticatedRequest, @Body() dto: CreateTaskDto) {
+    return this.tasksService.create(dto, req.user.userId);
   }
 
   @Put(':id')
@@ -117,7 +122,7 @@ export class TasksController {
     status: HttpStatus.NOT_FOUND,
     description: SWAGGER_RESP_NOT_FOUND,
   })
-  remove(@Param('id') id: string) {
-    this.tasksService.remove(id);
+  async remove(@Param('id') id: string) {
+    await this.tasksService.remove(id);
   }
 }

@@ -8,7 +8,7 @@ import {
   SWAGGER_PAG_TOTAL_EXAMPLE,
   SWAGGER_PAG_TOTAL_PAGES_DESC,
   SWAGGER_PAG_TOTAL_PAGES_EXAMPLE,
-} from '../common.constant';
+} from '../share.constant';
 
 export class PaginationMetaDto {
   @ApiProperty({
