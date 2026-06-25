@@ -137,7 +137,7 @@ The current mitigation is a `@Transform` decorator (`NormalizeEnumString`) on th
 
 ```
 src/
-├── auth/                      # Module xử lý Auth (JWT, Đăng ký, Đăng nhập)
+├── auth/
 │   ├── dto/
 │   │   ├── login.dto.ts
 │   │   └── register.dto.ts
@@ -145,35 +145,35 @@ src/
 │   ├── auth.controller.ts
 │   ├── auth.module.ts
 │   ├── auth.service.ts
-│   ├── jwt-guard.guard.ts     # Guard bảo vệ các route cần đăng nhập
-│   └── jwt.strategy.ts        # Chiến lược xác thực Passport JWT
-├── filters/                   # Bộ lọc lỗi toàn cục (Global Exception Filters)
+│   ├── jwt-guard.guard.ts
+│   └── jwt.strategy.ts
+├── filters/
 │   └── all-exceptions.filter.ts
-├── share/                     # Tiện ích, Decorator và hằng số dùng chung toàn app
+├── share/
 │   ├── dto/
 │   ├── share.constant.ts
 │   └── share.decorator.ts
-├── tasks/                     # Module quản lý Công việc (Tasks CRUD)
+├── tasks/
 │   ├── dto/
 │   │   ├── create-task.dto.ts
 │   │   ├── query-task.dto.ts
 │   │   ├── task-response.dto.ts
 │   │   ├── update-status.dto.ts
 │   │   └── update-task.dto.ts
-│   ├── task.helper.ts         # Hàm bổ trợ (Format dữ liệu, tính toán vị trí Lexorank)
+│   ├── task.helper.ts
 │   ├── tasks.constant.ts
 │   ├── tasks.controller.ts
 │   ├── tasks.module.ts
-│   └── tasks.service.ts       # Tầng nghiệp vụ xử lý dữ liệu với Prisma
-├── users/                     # Module quản lý Người dùng (Users Profile)
+│   └── tasks.service.ts
+├── users/
 │   ├── dto/
 │   │   └── user-response.dto.ts
 │   ├── users.constant.ts
 │   ├── users.controller.ts
 │   ├── users.module.ts
 │   └── users.service.ts
-├── app.controller.ts          # Controller gốc của ứng dụng
-└── app.module.ts              # Module chính (Root) tổng hợp tất cả các module con
+├── app.controller.ts
+└── app.module.ts
 ```
 
 ---
