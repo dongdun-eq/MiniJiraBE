@@ -74,21 +74,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     this.logError(request.method, request.url, status, exception);
 
-    // 🔥 XỬ LÝ LỖI VALIDATION ĐÃ ĐƯỢC FORMAT TỪ MAIN.TS
     if (
       status === 400 &&
       typeof exceptionResponse === 'object' &&
       exceptionResponse !== null &&
       'isValidationError' in exceptionResponse
     ) {
-      // Ép kiểu về CustomValidationError thay vì 'any'
       const validException = exceptionResponse as CustomValidationError;
 
       return response.status(status).json({
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Validation failed',
-          details: validException.details, // Kiểu dữ liệu lúc này đã tường minh, ESLint sẽ im lặng ngay lập tức
+          details: validException.details,
         },
       });
     }
