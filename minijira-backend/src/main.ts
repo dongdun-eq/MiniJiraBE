@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { AllExceptionsFilter } from './filters/all-exceptions.filter';
 
 async function bootstrap() {
@@ -12,6 +12,17 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
+      exceptionFactory: (errors) => {
+        const details = errors.map((error) => ({
+          field: error.property,
+          message: Object.values(error.constraints || {})[0],
+        }));
+
+        return new BadRequestException({
+          isValidationError: true,
+          details,
+        });
+      },
     }),
   );
 

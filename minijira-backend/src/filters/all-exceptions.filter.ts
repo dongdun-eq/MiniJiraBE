@@ -50,7 +50,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
         .json(this.buildError(503, 'Database unavailable', request.url));
     }
 
-    // Ép kiểu hẳn hoi về number để tránh lỗi TS
     const status: number =
       exception instanceof HttpException ? exception.getStatus() : 500;
 
